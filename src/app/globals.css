@@ -1,26 +1,107 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@plugin "daisyui" {
+  themes: light --default, forest --prefersdark;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+.rdp-root {
+  --rdp-accent-color: var(--color-primary, #1eb854) !important;
+  --rdp-accent-background-color: color-mix(in srgb, var(--color-primary, #1eb854) 15%, transparent) !important;
+  --rdp-today-color: var(--color-primary, #1eb854) !important;
+  --rdp-selected-border: none !important;
+  --rdp-day-height: 38px;
+  --rdp-day-width: 38px;
+  --rdp-day_button-height: 36px;
+  --rdp-day_button-width: 36px;
+  --rdp-day_button-border-radius: 8px;
+  font-family: inherit;
+  color: var(--color-base-content);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.rdp-month_caption {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-base-content);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.rdp-chevron {
+  fill: var(--color-primary, #1eb854) !important;
+}
+
+.rdp-button_next,
+.rdp-button_previous {
+  border-radius: 8px !important;
+  transition: all 0.15s ease;
+  color: var(--color-base-content) !important;
+}
+
+.rdp-button_next:hover:not([disabled]),
+.rdp-button_previous:hover:not([disabled]) {
+  background-color: var(--color-base-200, rgba(255, 255, 255, 0.1)) !important;
+}
+
+.rdp-button_next:disabled,
+.rdp-button_previous:disabled {
+  opacity: 0.25 !important;
+  cursor: not-allowed !important;
+}
+
+.rdp-weekday {
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  color: var(--color-base-content);
+  opacity: 0.6;
+}
+
+.rdp-day_button {
+  border-radius: 8px !important;
+  transition: all 0.15s ease;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  color: var(--color-base-content) !important;
+}
+
+.rdp-day_button:hover:not([disabled]) {
+  background-color: var(--color-base-200, rgba(255, 255, 255, 0.1)) !important;
+  color: var(--color-base-content) !important;
+}
+
+
+.rdp-today:not(.rdp-selected):not(.rdp-outside) .rdp-day_button {
+  color: var(--color-primary, #1eb854) !important;
+  font-weight: 700 !important;
+  border: 1.5px solid var(--color-primary, #1eb854) !important;
+  background-color: color-mix(in srgb, var(--color-primary, #1eb854) 10%, transparent) !important;
+}
+
+.rdp-today:not(.rdp-selected):not(.rdp-outside) .rdp-day_button:hover {
+  background-color: color-mix(in srgb, var(--color-primary, #1eb854) 22%, transparent) !important;
+}
+
+
+.rdp-selected .rdp-day_button,
+.rdp-selected .rdp-day_button:hover,
+.rdp-selected .rdp-day_button:focus,
+.rdp-day.rdp-selected .rdp-day_button,
+.rdp-today.rdp-selected .rdp-day_button,
+.rdp-selected.rdp-today .rdp-day_button {
+  background-color: var(--color-primary, #1eb854) !important;
+  color: var(--color-primary-content, #000000) !important;
+  font-weight: 800 !important;
+  border: none !important;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--color-primary, #1eb854) 40%, transparent) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.rdp-disabled,
+.rdp-day_button:disabled {
+  opacity: 0.25 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
+.rdp-outside {
+  opacity: 0.3 !important;
 }
