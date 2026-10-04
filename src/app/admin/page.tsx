@@ -14,13 +14,19 @@ import {
   Users,
   CheckCircle2,
   AlertCircle,
-  QrCode,
   UserCheck,
   ChevronDown,
   ChevronUp,
   Filter,
   User,
+  QrCode,
 } from "lucide-react";
+import { QrScannerModal } from "@/app/components/qr-scanner-modal";
+import {
+  isSessionEnded,
+  isSessionActive,
+  isSlotInPast,
+} from "@/lib/session-time";
 
 interface SessionItem {
   id: string;
@@ -68,15 +74,6 @@ interface SessionDetails {
 }
 
 const OPERATING_HOURS = Array.from({ length: 17 }, (_, i) => i + 6);
-
-function isHourInPast(dateStr: string, hour: number): boolean {
-  if (!dateStr) return false;
-  const [year, month, day] = dateStr.split("-").map(Number);
-  if (!year || !month || !day) return false;
-  const slotDate = new Date(year, month - 1, day, hour, 0, 0, 0);
-  const now = new Date();
-  return slotDate <= now;
-}
 
 type TimelineSlot =
   | { type: "session"; hour: number; session: SessionItem }
@@ -146,6 +143,16 @@ function AdminSessionsContent() {
     success: boolean;
     message: string;
   } | null>(null);
+  const [showScanner, setShowScanner] = useState<boolean>(false);
+
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -342,6 +349,50 @@ function AdminSessionsContent() {
     }
   };
 
+  const handleScanCode = async (scannedCode: string) => {
+    try {
+      const { data, error: apiError } = await api.sessions["check-in"].post({
+        code: scannedCode.trim().toUpperCase(),
+      });
+
+      if (apiError || !data?.success) {
+        const errorMsg =
+          (apiError?.value as { message?: string })?.message ||
+          "Invalid check-in code or session is not active right now.";
+        return {
+          success: false,
+          message: errorMsg,
+        };
+      }
+
+      fetchSessions();
+      if (expandedSessionId) {
+        const res = await api.sessions({ id: expandedSessionId }).get();
+        if (res.data?.success && res.data.session) {
+          setSessionDetails((prev) => ({
+            ...prev,
+            [expandedSessionId]: {
+               id: expandedSessionId,
+               bookings: res.data.session.bookings as Attendee[],
+               waitlist: res.data.session.waitlist as WaitlistAttendee[],
+            },
+          }));
+        }
+      }
+
+      return {
+        success: true,
+        message: data.message || "Checked in successfully!",
+        memberName: (data.booking as { userName?: string })?.userName,
+      };
+    } catch {
+      return {
+        success: false,
+        message: "Network error processing check-in.",
+      };
+    }
+  };
+
   const allHoursForDay = useMemo(() => {
     if (!selectedDate) return [];
     const sessionHours = sessions.map((s) => s.startHour);
@@ -384,14 +435,14 @@ function AdminSessionsContent() {
           slots.push({
             type: "empty",
             hour,
-            isPast: isHourInPast(selectedDate, hour),
+            isPast: isSlotInPast(selectedDate, hour, currentTime),
           });
         }
       }
     }
 
     return slots;
-  }, [selectedDate, sessions, allHoursForDay, slotFilter]);
+  }, [selectedDate, sessions, allHoursForDay, slotFilter, currentTime]);
 
   return (
     <div className="space-y-6">
@@ -409,7 +460,6 @@ function AdminSessionsContent() {
         </Link>
       </div>
 
-      {/* Check-In Bar */}
       <div className="card bg-base-100 shadow-sm border border-base-200">
         <div className="card-body p-4 sm:p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
@@ -419,22 +469,33 @@ function AdminSessionsContent() {
                 <h2 className="text-xl font-bold">Mark as present</h2>
               </div>
               <p className="text-xs text-base-content/60 mt-1">
-                Enter the member&apos;s 6-character booking check-in code.
+                Scan member QR pass with camera or enter the 6-character code.
               </p>
             </div>
 
-            {checkInCode && (
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              {checkInCode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCheckInCode("");
+                    setCheckInResult(null);
+                  }}
+                  className="btn btn-ghost btn-xs text-base-content/60 hover:text-base-content"
+                >
+                  Clear code
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => {
-                  setCheckInCode("");
-                  setCheckInResult(null);
-                }}
-                className="btn btn-ghost btn-xs text-base-content/60 hover:text-base-content self-start sm:self-center"
+                onClick={() => setShowScanner(true)}
+                className="btn btn-primary btn-sm gap-2 shadow-xs"
               >
-                Clear code
+                <QrCode className="w-4 h-4" />
+                Scan QR Code
               </button>
-            )}
+            </div>
           </div>
 
           <form
@@ -487,7 +548,6 @@ function AdminSessionsContent() {
         </div>
       </div>
 
-      {/* Filters Toolbar */}
       <div className="card bg-base-100 shadow-sm border border-base-200">
         <div className="card-body p-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -539,7 +599,6 @@ function AdminSessionsContent() {
               </div>
             </div>
 
-            {/* Slot filter tabs (when a date is selected) & Refresh */}
             <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3">
               {selectedDate && (
                 <div className="join">
@@ -587,7 +646,6 @@ function AdminSessionsContent() {
         </div>
       </div>
 
-      {/* Sessions Content */}
       <div>
         {error && (
           <div role="alert" className="alert alert-error mb-4 flex items-center justify-between">
@@ -656,12 +714,21 @@ function AdminSessionsContent() {
                 const session = slot.session;
                 const isExpanded = expandedSessionId === session.id;
                 const details = sessionDetails[session.id];
+                const sessionSource = {
+                  date: session.date,
+                  startHour: session.startHour,
+                  startTime: session.startTime,
+                };
+                const hasEnded = isSessionEnded(sessionSource, currentTime);
+                const isCurrentlyActive = isSessionActive(sessionSource, currentTime);
 
                 return (
                   <div
                     key={`session-${session.id}`}
                     className={`card bg-base-100 shadow-sm border transition-all ${
-                      session.isCurrentlyActive
+                      hasEnded
+                        ? "border-base-200 opacity-60 bg-base-200/20"
+                        : isCurrentlyActive
                         ? "border-primary ring-1 ring-primary/30"
                         : "border-base-200"
                     }`}
@@ -679,11 +746,11 @@ function AdminSessionsContent() {
                           </div>
                         </div>
 
-                        {session.isCurrentlyActive ? (
+                        {isCurrentlyActive ? (
                           <span className="badge badge-accent badge-sm font-semibold">
                             In Progress
                           </span>
-                        ) : session.hasEnded ? (
+                        ) : hasEnded ? (
                           <span className="badge badge-ghost badge-sm text-base-content/60">
                             Ended
                           </span>
@@ -779,10 +846,10 @@ function AdminSessionsContent() {
                                     ) : (
                                       <button
                                         type="button"
-                                        disabled={checkInLoading || session.hasEnded}
+                                        disabled={checkInLoading || hasEnded}
                                         onClick={() => handleDirectCheckIn(booking.checkInCode)}
                                         className="btn btn-xs btn-primary shrink-0"
-                                        title="Mark Present"
+                                        title={hasEnded ? "Session has ended" : "Mark Present"}
                                       >
                                         Check In
                                       </button>
@@ -897,6 +964,12 @@ function AdminSessionsContent() {
           </div>
         )}
       </div>
+
+      <QrScannerModal
+        isOpen={showScanner}
+        onClose={() => setShowScanner(false)}
+        onScanCode={handleScanCode}
+      />
     </div>
   );
 }
