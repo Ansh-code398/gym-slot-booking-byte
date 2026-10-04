@@ -95,9 +95,12 @@ export function DatePicker({
       >
         <span className="flex items-center gap-2 truncate">
           <CalendarIcon className="w-4 h-4 text-primary shrink-0" />
-          <span className={date ? "text-base-content font-medium" : "text-base-content/60"}>
+          <span
+            suppressHydrationWarning
+            className={date ? "text-base-content font-medium" : "text-base-content/60"}
+          >
             {date
-              ? date.toLocaleDateString(undefined, {
+              ? date.toLocaleDateString("en-US", {
                   year: "numeric",
                   month: "short",
                   day: "numeric",
