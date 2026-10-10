@@ -27,6 +27,7 @@ export function OtpInput({
 
   const chars = Array.from({ length }, (_, i) => value[i] || "");
 
+
   useEffect(() => {
     if (autoFocus && inputRefs.current[0]) {
       inputRefs.current[0].focus();
@@ -41,6 +42,7 @@ export function OtpInput({
       const newChars = [...chars];
 
       if (newChars[index]) {
+
         newChars[index] = "";
         const newValue = newChars.join("").trimEnd();
         onChange(newValue);
@@ -93,6 +95,7 @@ export function OtpInput({
     }
 
     if (cleanChars.length > 1) {
+      
       const pasted = cleanChars.slice(0, length);
       onChange(pasted);
       const nextIndex = Math.min(pasted.length, length - 1);
@@ -120,6 +123,7 @@ export function OtpInput({
       }
     }
 
+  
     const nonSpaceCount = newChars.filter(Boolean).length;
     if (nonSpaceCount === length && onComplete) {
       onComplete(newChars.join(""));
@@ -194,11 +198,10 @@ export function OtpInput({
               onPaste={handlePaste}
               onFocus={handleFocus}
               aria-label={`Code character ${index + 1} of ${length}`}
-              className={`w-10 h-12 sm:w-12 sm:h-14 text-center text-lg sm:text-xl font-mono font-bold uppercase rounded-lg border transition-all duration-150 outline-none select-all ${
-                isFilled
+              className={`w-10 h-12 sm:w-12 sm:h-14 text-center text-lg sm:text-xl font-mono font-bold uppercase rounded-lg border transition-all duration-150 outline-none select-all ${isFilled
                   ? "border-primary/60 bg-base-200/80 text-primary shadow-sm"
                   : "border-base-300 bg-base-200/40 text-base-content placeholder-base-content/20"
-              } focus:border-primary focus:bg-base-100 focus:ring-2 focus:ring-primary/20 focus:shadow-md disabled:opacity-40 disabled:cursor-not-allowed`}
+                } focus:border-primary focus:bg-base-100 focus:ring-2 focus:ring-primary/20 focus:shadow-md disabled:opacity-40 disabled:cursor-not-allowed`}
               placeholder="·"
             />
           </React.Fragment>

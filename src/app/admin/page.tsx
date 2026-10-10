@@ -125,27 +125,50 @@ function AdminSessionsContent() {
   const searchParams = useSearchParams();
   const urlDate = searchParams.get("date");
 
+
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     if (urlDate) return urlDate;
     return getTodayStr();
   });
   const [slotFilter, setSlotFilter] = useState<"all" | "scheduled" | "empty">("all");
 
+
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
 
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [detailsLoading, setDetailsLoading] = useState<boolean>(false);
   const [sessionDetails, setSessionDetails] = useState<Record<string, SessionDetails>>({});
 
+
   const [checkInCode, setCheckInCode] = useState<string>("");
   const [checkInLoading, setCheckInLoading] = useState<boolean>(false);
+  const [actionLoadingCode, setActionLoadingCode] = useState<string | null>(null);
   const [checkInResult, setCheckInResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
   const [showScanner, setShowScanner] = useState<boolean>(false);
+
+  
+  const [toast, setToast] = useState<{
+    id: string;
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+
+  const showToast = useCallback(
+    (message: string, type: "success" | "error" | "info" = "error", duration = 5000) => {
+      const id = Math.random().toString(36).substring(7);
+      setToast({ id, type, message });
+      setTimeout(() => {
+        setToast((curr) => (curr?.id === id ? null : curr));
+      }, duration);
+    },
+    []
+  );
 
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
 
@@ -155,6 +178,7 @@ function AdminSessionsContent() {
     }, 5000);
     return () => clearInterval(timer);
   }, []);
+
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -363,13 +387,16 @@ function AdminSessionsContent() {
           (apiError?.value as { message?: string })?.message ||
           "Invalid check-in code or session is not active right now.";
         setCheckInResult({ success: false, message: errorMsg });
+        showToast(errorMsg, "error");
         return;
       }
 
+      const successMsg = data.message || "Member checked in successfully!";
       setCheckInResult({
         success: true,
-        message: data.message || "Member checked in successfully!",
+        message: successMsg,
       });
+      showToast(successMsg, "success");
       setCheckInCode("");
 
       fetchSessions();
@@ -387,23 +414,27 @@ function AdminSessionsContent() {
         }
       }
     } catch {
+      const errorMsg = "Network error processing check-in.";
       setCheckInResult({
         success: false,
-        message: "Network error processing check-in.",
+        message: errorMsg,
       });
+      showToast(errorMsg, "error");
     } finally {
       setCheckInLoading(false);
     }
   };
 
   const handleDirectCheckIn = async (code: string) => {
-    setCheckInCode(code);
+    const formattedCode = code.trim().toUpperCase();
+    setCheckInCode(formattedCode);
     setCheckInLoading(true);
+    setActionLoadingCode(formattedCode);
     setCheckInResult(null);
 
     try {
       const { data, error: apiError } = await api.sessions["check-in"].post({
-        code: code.trim().toUpperCase(),
+        code: formattedCode,
       });
 
       if (apiError || !data?.success) {
@@ -411,13 +442,16 @@ function AdminSessionsContent() {
           (apiError?.value as { message?: string })?.message ||
           "Failed to check in member.";
         setCheckInResult({ success: false, message: errorMsg });
+        showToast(errorMsg, "error");
         return;
       }
 
+      const successMsg = data.message || `Checked in successfully!`;
       setCheckInResult({
         success: true,
-        message: data.message || `Checked in successfully!`,
+        message: successMsg,
       });
+      showToast(successMsg, "success");
 
       if (expandedSessionId) {
         const res = await api.sessions({ id: expandedSessionId }).get();
@@ -434,12 +468,15 @@ function AdminSessionsContent() {
       }
       fetchSessions();
     } catch {
+      const errorMsg = "Network error";
       setCheckInResult({
         success: false,
-        message: "Network error processing check-in.",
+        message: errorMsg,
       });
+      showToast(errorMsg, "error");
     } finally {
       setCheckInLoading(false);
+      setActionLoadingCode(null);
     }
   };
 
@@ -453,11 +490,15 @@ function AdminSessionsContent() {
         const errorMsg =
           (apiError?.value as { message?: string })?.message ||
           "Invalid check-in code or session is not active right now.";
+        showToast(errorMsg, "error");
         return {
           success: false,
           message: errorMsg,
         };
       }
+
+      const successMsg = data.message || "Checked in successfully!";
+      showToast(successMsg, "success");
 
       fetchSessions();
       if (expandedSessionId) {
@@ -476,13 +517,15 @@ function AdminSessionsContent() {
 
       return {
         success: true,
-        message: data.message || "Checked in successfully!",
+        message: successMsg,
         memberName: (data.booking as { userName?: string })?.userName,
       };
     } catch {
+      const errorMsg = "Network error.";
+      showToast(errorMsg, "error");
       return {
         success: false,
-        message: "Network error processing check-in.",
+        message: errorMsg,
       };
     }
   };
@@ -765,7 +808,6 @@ function AdminSessionsContent() {
             ))}
           </div>
         ) : timelineSlots.length === 0 ? (
-          
           <div className="card bg-base-100 border border-dashed border-base-300 p-8 text-center space-y-3">
             <Calendar className="w-12 h-12 text-base-content/40 mx-auto" />
             <h3 className="font-bold text-lg">
@@ -940,12 +982,15 @@ function AdminSessionsContent() {
                                     ) : (
                                       <button
                                         type="button"
-                                        disabled={checkInLoading || hasEnded}
+                                        disabled={actionLoadingCode === booking.checkInCode || checkInLoading || hasEnded}
                                         onClick={() => handleDirectCheckIn(booking.checkInCode)}
-                                        className="btn btn-xs btn-primary shrink-0"
+                                        className="btn btn-xs btn-primary shrink-0 gap-1"
                                         title={hasEnded ? "Session has ended" : "Mark Present"}
                                       >
-                                        Check In
+                                        {actionLoadingCode === booking.checkInCode ? (
+                                          <span className="loading loading-spinner loading-xs" />
+                                        ) : null}
+                                        <span>Check In</span>
                                       </button>
                                     )}
                                   </div>
@@ -1064,6 +1109,38 @@ function AdminSessionsContent() {
         onClose={() => setShowScanner(false)}
         onScanCode={handleScanCode}
       />
+
+      {toast && (
+        <div className="toast toast-bottom toast-end z-50 p-4 sticky">
+          <div
+            role="alert"
+            className={`alert ${
+              toast.type === "success"
+                ? "alert-success text-success-content"
+                : toast.type === "error"
+                ? "alert-error text-error-content"
+                : "alert-info text-info-content"
+            } shadow-2xl flex items-center justify-between gap-3 text-sm max-w-md animate-in fade-in slide-in-from-bottom-2 duration-200`}
+          >
+            <div className="flex items-center gap-2">
+              {toast.type === "success" ? (
+                <CheckCircle2 className="w-5 h-5 shrink-0" />
+              ) : (
+                <AlertCircle className="w-5 h-5 shrink-0" />
+              )}
+              <span className="font-medium leading-snug">{toast.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="btn btn-ghost btn-xs btn-circle shrink-0 text-current opacity-70 hover:opacity-100"
+              aria-label="Dismiss notification"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
