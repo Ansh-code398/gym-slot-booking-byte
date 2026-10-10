@@ -27,6 +27,8 @@ import {
   isSessionActive,
   isSlotInPast,
 } from "@/lib/session-time";
+import { useSessions } from "@/lib/use-sessions";
+import type { GymEvent } from "@/server/events";
 
 interface SessionItem {
   id: string;
@@ -220,6 +222,98 @@ function AdminSessionsContent() {
       ignore = true;
     };
   }, [selectedDate]);
+
+  const refreshSessionDetails = useCallback(async (sessionId: string) => {
+    try {
+      const { data, error: apiError } = await api.sessions({ id: sessionId }).get();
+      if (!apiError && data?.success && data.session) {
+        setSessionDetails((prev) => ({
+          ...prev,
+          [sessionId]: {
+            id: sessionId,
+            bookings: (data.session.bookings as Attendee[]) || [],
+            waitlist: (data.session.waitlist as WaitlistAttendee[]) || [],
+          },
+        }));
+      }
+    } catch {
+    }
+  }, []);
+
+  const fetchSessionsSilently = useCallback(async () => {
+    try {
+      const { data, error: apiError } = await api.sessions.get({
+        query: {
+          date: selectedDate || undefined,
+        },
+      });
+
+      if (!apiError && data?.success && Array.isArray(data.sessions)) {
+        setSessions(data.sessions as SessionItem[]);
+      }
+    } catch {
+    }
+  }, [selectedDate]);
+
+  useSessions({
+    onSessionUpdate: (event: GymEvent) => {
+      if (event.sessionId && event.data) {
+        setSessions((prev) =>
+          prev.map((s) => {
+            if (s.id === event.sessionId && event.data) {
+              const confirmed =
+                typeof event.data.confirmedBookingsCount === "number"
+                  ? event.data.confirmedBookingsCount
+                  : s.confirmedBookingsCount;
+              const waitlist =
+                typeof event.data.waitlistCount === "number"
+                  ? event.data.waitlistCount
+                  : s.waitlistCount;
+              const capacity =
+                typeof event.data.capacity === "number"
+                  ? event.data.capacity
+                  : s.capacity;
+              return {
+                ...s,
+                confirmedBookingsCount: confirmed,
+                waitlistCount: waitlist,
+                seatsRemaining: Math.max(0, capacity - confirmed),
+                isFull: confirmed >= capacity,
+              };
+            }
+            return s;
+          })
+        );
+      }
+
+      if (event.type === "check_in" && event.sessionId && event.data?.checkInCode) {
+        const code = String(event.data.checkInCode);
+        setSessionDetails((prev) => {
+          const detail = prev[event.sessionId!];
+          if (!detail) return prev;
+          return {
+            ...prev,
+            [event.sessionId!]: {
+              ...detail,
+              bookings: detail.bookings.map((b) =>
+                b.checkInCode === code ? { ...b, checkedIn: true, checkedInAt: new Date() } : b
+              ),
+            },
+          };
+        });
+      }
+
+      if (expandedSessionId && (!event.sessionId || event.sessionId === expandedSessionId)) {
+        refreshSessionDetails(expandedSessionId);
+      }
+    },
+    onRefresh: () => {
+      fetchSessionsSilently();
+      if (expandedSessionId) {
+        refreshSessionDetails(expandedSessionId);
+      }
+    },
+  });
 
   const toggleExpandSession = async (sessionId: string) => {
     if (expandedSessionId === sessionId) {

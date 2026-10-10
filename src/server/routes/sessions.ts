@@ -13,6 +13,7 @@ import {
   isSessionActive,
   isSessionUpcoming,
 } from "@/lib/session-time";
+import { gymEventBus, broadcastSessionUpdate, type GymEvent } from "../events";
 
 export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
   .use(authMiddleware)
@@ -70,6 +71,8 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
           capacity: capacity || 20,
         })
         .returning();
+
+      await broadcastSessionUpdate(newSession.id, "session_created");
 
       return {
         success: true,
@@ -356,6 +359,8 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
           .delete(waitlist)
           .where(and(eq(waitlist.sessionId, id), eq(waitlist.userId, user.id)));
 
+        await broadcastSessionUpdate(id, "booking_created");
+
         return {
           success: true,
           isWaitlist: false,
@@ -396,6 +401,8 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
         .where(and(eq(waitlist.sessionId, id), eq(waitlist.status, "waiting")));
 
       const position = Number(waitlistCountResult?.count || 1);
+
+      await broadcastSessionUpdate(id, "waitlist_updated");
 
       return {
         success: true,
@@ -494,6 +501,8 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
           });
         }
 
+        await broadcastSessionUpdate(id, "booking_cancelled");
+
         return {
           success: true,
           message: "Your booking has been cancelled.",
@@ -518,6 +527,8 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
           .set({ status: "cancelled" })
           .where(eq(waitlist.id, waitlistEntry.id));
 
+        await broadcastSessionUpdate(id, "waitlist_updated");
+
         return {
           success: true,
           message: "You have been removed from the waitlist.",
@@ -527,6 +538,85 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
       throw new NotFoundError("No active booking or waitlist entry found for this session.");
     }
   )
+  .get("/live", ({ request }) => {
+    let unsubscribe: (() => void) | null = null;
+    let pingInterval: ReturnType<typeof setInterval> | null = null;
+
+    const stream = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder();
+
+        try {
+          controller.enqueue(
+            encoder.encode(
+              `event: connected\ndata: ${JSON.stringify({
+                connected: true,
+                timestamp: new Date().toISOString(),
+              })}\n\n`
+            )
+          );
+        } catch {
+        }
+
+        const listener = (event: GymEvent) => {
+          try {
+            controller.enqueue(
+              encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+            );
+          } catch {
+            cleanup();
+          }
+        };
+
+        gymEventBus.on("gym-event", listener);
+        unsubscribe = () => {
+          gymEventBus.off("gym-event", listener);
+        };
+
+        pingInterval = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(`: ping\n\n`));
+          } catch {
+            cleanup();
+          }
+        }, 15000);
+
+        function cleanup() {
+          if (unsubscribe) {
+            unsubscribe();
+            unsubscribe = null;
+          }
+          if (pingInterval) {
+            clearInterval(pingInterval);
+            pingInterval = null;
+          }
+        }
+
+        request.signal?.addEventListener("abort", () => {
+          cleanup();
+        });
+      },
+      cancel() {
+        if (unsubscribe) {
+          unsubscribe();
+          unsubscribe = null;
+        }
+        if (pingInterval) {
+          clearInterval(pingInterval);
+          pingInterval = null;
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  })
   .get(
     "/:id",
     async ({ params: { id }, requireAuth }) => {
@@ -630,6 +720,8 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
           checkedIn: bookings.checkedIn,
           checkedInAt: bookings.checkedInAt,
           checkInCode: bookings.checkInCode,
+          sessionDate: sessions.date,
+          sessionStartHour: sessions.startHour,
           sessionStartTime: sessions.startTime,
           userName: users.name,
           userEmail: users.email,
@@ -656,15 +748,18 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
 
       const now = new Date();
       const sessionTiming = {
-        date: "",
-        startHour: 0,
+        date: booking.sessionDate,
+        startHour: booking.sessionStartHour,
         startTime: booking.sessionStartTime,
       };
 
       if (isSessionUpcoming(sessionTiming, now)) {
-        const sessionStart = new Date(booking.sessionStartTime);
+        const hour = booking.sessionStartHour;
+        const period = hour >= 12 ? "PM" : "AM";
+        const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+        const timeStr = `${displayHour}:00 ${period}`;
         throw new BadRequestError(
-          `Check-in has not opened yet. Session starts at ${sessionStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
+          `Check-in has not opened yet. Session starts at ${timeStr}.`
         );
       }
 
@@ -680,6 +775,13 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
           checkedInAt: nowTimestamp,
         })
         .where(eq(bookings.id, booking.id));
+
+      await broadcastSessionUpdate(booking.sessionId, "check_in", {
+        bookingId: booking.id,
+        checkInCode: booking.checkInCode,
+        checkedIn: true,
+        memberName: booking.userName,
+      });
 
       return {
         success: true,

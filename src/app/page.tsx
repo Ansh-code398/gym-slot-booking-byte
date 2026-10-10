@@ -25,6 +25,8 @@ import {
   isSessionStarted,
   isSessionActive,
 } from "@/lib/session-time";
+import { useSessions } from "@/lib/use-sessions";
+import type { GymEvent } from "@/server/events";
 
 interface UserBookingInfo {
   id: string;
@@ -207,6 +209,65 @@ export default function Home() {
       ignore = true;
     };
   }, [selectedDate, availableOnly]);
+
+  const fetchSessionsSilently = useCallback(async () => {
+    try {
+      const { data, error: apiErr } = await api.sessions.get({
+        query: {
+          date: selectedDate || undefined,
+          availableOnly: availableOnly ? "true" : undefined,
+        },
+      });
+
+      if (!apiErr && data?.success && Array.isArray(data.sessions)) {
+        setSessions(data.sessions as SessionItem[]);
+      }
+    } catch {
+    }
+  }, [selectedDate, availableOnly]);
+
+  useSessions({
+    onSessionUpdate: (event: GymEvent) => {
+      if (event.sessionId && event.data) {
+        setSessions((prevSessions) =>
+          prevSessions.map((s) => {
+            if (s.id === event.sessionId && event.data) {
+              const confirmed =
+                typeof event.data.confirmedBookingsCount === "number"
+                  ? event.data.confirmedBookingsCount
+                  : s.confirmedBookingsCount;
+              const waitlist =
+                typeof event.data.waitlistCount === "number"
+                  ? event.data.waitlistCount
+                  : s.waitlistCount;
+              const capacity =
+                typeof event.data.capacity === "number"
+                  ? event.data.capacity
+                  : s.capacity;
+              const seats =
+                typeof event.data.seatsRemaining === "number"
+                  ? event.data.seatsRemaining
+                  : Math.max(0, capacity - confirmed);
+              const full =
+                typeof event.data.isFull === "boolean"
+                  ? event.data.isFull
+                  : confirmed >= capacity;
+
+              return {
+                ...s,
+                confirmedBookingsCount: confirmed,
+                waitlistCount: waitlist,
+                seatsRemaining: seats,
+                isFull: full,
+              };
+            }
+            return s;
+          })
+        );
+      }
+    },
+    onRefresh: fetchSessionsSilently,
+  });
 
   
   const handleBookSession = async (

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { QrPassModal } from "@/app/components/qr-pass-modal";
 import { isSessionEnded, isSessionActive } from "@/lib/session-time";
+import { useSessions } from "@/lib/use-sessions";
 
 interface MyBookingItem {
   bookingId: string;
@@ -148,6 +149,10 @@ export default function MyBookingsPage() {
       ignore = true;
     };
   }, [user, authLoading]);
+
+  useSessions({
+    onRefresh: loadData,
+  });
 
   
   const handleCancelBooking = async (sessionId: string) => {
