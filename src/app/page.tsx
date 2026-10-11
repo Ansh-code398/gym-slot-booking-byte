@@ -363,7 +363,7 @@ export default function Home() {
             <Dumbbell className="w-7 h-7 text-primary" />
             Gym Booking Slots
           </h1>
-          </div>
+        </div>
 
         
         <div className="flex flex-wrap items-center gap-2">

@@ -23,7 +23,7 @@ export default function Navbar() {
 
   const [prevPathname, setPrevPathname] = useState(pathname);
 
-  if (prevPathname !== pathname) {
+   if (prevPathname !== pathname) {
     setPrevPathname(pathname);
     setMobileOpen(false);
   }

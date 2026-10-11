@@ -63,7 +63,7 @@ function CreateSessionForm() {
   const dateParam = searchParams.get("date");
   const hourParam = searchParams.get("hour");
 
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => {
+ const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => {
     if (dateParam) {
       const parsed = parseDateFromYYYYMMDD(dateParam);
       if (parsed) return parsed;
