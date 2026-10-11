@@ -197,8 +197,7 @@ export function QrScannerModal({ isOpen, onClose, onScanCode }: QrScannerModalPr
           (decodedText) => {
             handleDecodedText(decodedText);
           },
-          () => {
-          }
+          () => {}
         );
 
         setCameraActive(true);

@@ -103,7 +103,6 @@ export const waitlist = pgTable(
   ]
 );
 
-
 export const usersRelations = relations(users, ({ many }) => ({
   bookings: many(bookings),
   waitlist: many(waitlist),
